@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sql_crud/models/contact.dart';
 
+import 'db/database_helper.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -31,8 +33,26 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final _formKey = GlobalKey<FormState>();
-  final Contact _contact = Contact();
+  Contact _contact = Contact();
   List<Contact> contactList = [];
+  DatabaseHelper? _dbHelper;
+  final _ctrlName = TextEditingController();
+  final _ctrlMobile = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _dbHelper = DatabaseHelper.instance;
+    _refreshContactList();
+  }
+
+  _refreshContactList() async {
+    List<Contact> x = await _dbHelper!.fetchContacts();
+    setState(() {
+      contactList = x;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,6 +80,7 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Column(
               children: [
                 TextFormField(
+                  controller: _ctrlName,
                   decoration: const InputDecoration(labelText: 'Full Name'),
                   onSaved: (newValue) => setState(() {
                     _contact.name = newValue;
@@ -68,6 +89,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       (value!.isEmpty ? "this field is required" : null),
                 ),
                 TextFormField(
+                  controller: _ctrlMobile,
                   decoration: const InputDecoration(labelText: 'Mobile'),
                   onSaved: (newValue) => setState(() {
                     _contact.mobile = newValue;
@@ -80,19 +102,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   margin: const EdgeInsets.all(10.0),
                   child: ElevatedButton(
                     child: const Text("Submit"),
-                    onPressed: () {
+                    onPressed: () async {
                       var form = _formKey.currentState;
                       if (form!.validate()) {
                         form.save();
-                        setState(() {
-                          contactList.add(
-                            Contact(
-                              id: null,
-                              name: _contact.name,
-                              mobile: _contact.mobile,
-                            ),
-                          );
-                        });
+                        await _dbHelper!.insertContact(_contact);
+                        form.reset();
+                        await _refreshContactList();
+                        await _dbHelper!.updateContact(_contact);
+                        _resetForm();
                         print(_contact.name);
                       }
                     },
@@ -118,6 +136,17 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     title: Text(contactList[index].name!.toUpperCase()),
                     subtitle: Text(contactList[index].mobile!),
+                    onTap: () {
+                      _showForEdit(index);
+                    },
+                    trailing: IconButton(
+                        icon: const Icon(Icons.delete_sweep),
+                        onPressed: () async {
+                          await _dbHelper!
+                              .deleteContact(contactList[index].id!);
+                          _resetForm();
+                          _refreshContactList();
+                        }),
                   ),
                   const Divider(height: 5),
                 ],
@@ -127,4 +156,21 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
       );
+
+  _showForEdit(index) {
+    setState(() {
+      _contact = contactList[index];
+      _ctrlName.text = contactList[index].name!;
+      _ctrlName.text = contactList[index].mobile!;
+    });
+  }
+
+  _resetForm() {
+    setState(() {
+      _formKey.currentState!.reset();
+      _ctrlName.clear();
+      _ctrlMobile.clear();
+      _contact.id = null;
+    });
+  }
 }
